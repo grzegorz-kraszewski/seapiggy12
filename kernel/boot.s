@@ -1,7 +1,7 @@
 				.section ".text"
 
 				.xdef	_start
-				.xref	main
+				.xref	Main
 				.globl _start
 _start:
 				LDR		r1,=_start
@@ -16,7 +16,7 @@ clearing:
 				CBNZ	r2,clearing
 bss_cleared:
 */
-				BL		main
+				BL		Main
 infinity:
 				B		infinity
 
