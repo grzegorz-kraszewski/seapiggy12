@@ -12,7 +12,7 @@ kernel.img: $(OBJS)
 	$(OBJCOPY) -O binary kernel.o kernel.bin
 
 clean:
-	rm $(OBJS) kernel.o kernel.bin
+	rm -f $(OBJS) kernel.o kernel.bin
 
 boot.o: boot.s
 	$(AS) $< -o $@
