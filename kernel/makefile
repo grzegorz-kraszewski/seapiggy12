@@ -18,4 +18,4 @@ boot.o: boot.s
 	$(AS) $< -o $@
 
 main.o: main.c
-	$(CC) $(CFLAGS) -o $@ $<
+	$(CC) $(CFLAGS) -c $<
