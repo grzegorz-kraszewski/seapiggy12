@@ -2,7 +2,7 @@
 
 				.xdef	_start
 				.xref	main
-
+				.globl _start
 _start:
 				LDR		r1,=_start
 				MOV		sp,r1
