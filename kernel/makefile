@@ -5,17 +5,20 @@ OBJCOPY = arm-none-eabi-objcopy
 CFLAGS = -O2 -mfpu=vfp -mfloat-abi=hard -march=armv6zk -mtune=arm1176jzf-s
 CFLAGS += -ffreestanding -nostdlib -Wall
 LDFLAGS = -nostdlib -nostartfiles
-OBJS = boot.o main.o
+OBJS = boot.o main.o video.o
 
 kernel.img: $(OBJS)
 	$(LD) $(LDFLAGS) -o kernel.o $^
-	$(OBJCOPY) -O binary kernel.o kernel.bin
+	$(OBJCOPY) -O binary kernel.o $@
 
 clean:
-	rm -f $(OBJS) kernel.o kernel.bin
+	rm -f $(OBJS) kernel.o kernel.img
 
 boot.o: boot.s
 	$(AS) $< -o $@
 
-main.o: main.c
+%.o: %.c
 	$(CC) $(CFLAGS) -c $<
+
+main.o: main.c
+video.o: video.c
