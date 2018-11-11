@@ -62,7 +62,7 @@ uint32_t FBReq[24] __attribute__((aligned(16)));
 
 int SetVideoMode(int width, int height)
 {
-	FBReq[0] = 80;             /* message length in bytes */
+	FBReq[0] = 96;             /* message length in bytes */
 	FBReq[1] = 0;              /* message is a request */
 	FBReq[2] = 0x00048003;     /* display dimensions */
 	FBReq[3] = 8;              /* tag data field size */
