@@ -13,8 +13,6 @@
 #define MBOX_CHANMASK 0xF
 
 
-/* mailbox 0 registers */
-
 uint32_t mbox_recv(int channel)
 {
 	volatile uint32_t *mbox_read = (uint32_t*)0x20008B80;
