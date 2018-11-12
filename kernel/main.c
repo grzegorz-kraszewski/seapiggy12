@@ -3,20 +3,32 @@
 
 extern uint32_t __bss_start__, __bss_end__;
 
+asm ("	.section .startup	\n"
+"	.globl	_start		\n"
+"	.type	_start,%function\n"
+"_start:			\n"
+"	ldr	sp,=_start	\n"
+"	bl	BssClear	\n"
+"	bl	SetupCPU	\n"
+"	bl	Main		\n"
+"1:	b	1b		\n"
+"	.text			\n"
+"	.byte 0			\n"
+"	.string \"$VER: SeaPiggy12 1.0 (" __DATE__ ")\"\n"
+);
 
-static void BssClear(void)
+
+void BssClear(void)
 {
 	uint32_t *bss = &__bss_start__;
 
 	while (bss < &__bss_end__) *bss++ = 0;
 }
 
-
-void Main(void)
+void SetupCPU(void)
 {
 	uint32_t tmp;
-	BssClear();
-	
+
 	/* Enable caches and branch prediction. Enable unaligned accesses */
 	asm volatile("mrc p15, 0, %0, c1, c0, 0" : "=r"(tmp));
 	tmp |= (1 << 2) | (1 << 12) | (1 << 11); // D-Cache, I-Cache, Branch prediction, in that order
@@ -36,7 +48,9 @@ void Main(void)
 	*/
 	tmp = (1 << 30); // The EN bit
 	asm volatile("fmxr fpexc, %0"::"r"(tmp));
-	
-	
+}
+
+void Main(void)
+{
 	while (1);
 }

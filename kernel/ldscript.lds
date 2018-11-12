@@ -6,7 +6,7 @@ SECTIONS
 
     .text :
     {
-	boot.o(.text)
+	*(.startup)
 	*(.text)
 	*(.text.*)
 	*(.stub)
