@@ -15,8 +15,8 @@
 
 uint32_t mbox_recv(int channel)
 {
-	volatile uint32_t *mbox_read = (uint32_t*)0x20008B80;
-	volatile uint32_t *mbox_status = (uint32_t*)0x20008B98;
+	volatile uint32_t *mbox_read = (uint32_t*)0x2000B880;
+	volatile uint32_t *mbox_status = (uint32_t*)0x2000B898;
 	uint32_t response, status;
 
 	do
@@ -37,8 +37,8 @@ uint32_t mbox_recv(int channel)
 
 void mbox_send(int channel, uint32_t data)
 {
-	volatile uint32_t *mbox_write = (uint32_t*)0x20008BA0;
-	volatile uint32_t *mbox_status = (uint32_t*)0x20008B98;
+	volatile uint32_t *mbox_write = (uint32_t*)0x2000B8A0;
+	volatile uint32_t *mbox_status = (uint32_t*)0x2000B898;
 	uint32_t status;
 
 	data &= ~MBOX_CHANMASK;
