@@ -23,6 +23,19 @@ void Main(void)
 	tmp = (tmp | (1 << 22)) & ~(1 << 1);     // Unaligned loads and stores enabled, Strict alignment disabled
 	asm volatile("mcr p15, 0, %0, c1, c0, 0" ::"r"(tmp));
 	
+	/* 
+	   Enable cp10 an cp11 coprocessors. These are VFP Single (cp10) and 
+	   double (cp11) precision
+	*/
+	asm volatile("mrc p15, 0, %0, c1, c0, 2" : "=r"(tmp)); /* Coprocessor access register */
+	tmp |= (3 << 20) | (3 << 22); // Full access to cp10 and cp11
+	asm volatile("mcr p15, 0, %0, c1, c0, 2" ::"r"(tmp));
+	/* 
+	    VFP coprocessors enabled. Now set the EN bit of FPEXC register in order
+	    to allow VFP instructions
+	*/
+	tmp = (1 << 30); // The EN bit
+	asm volatile("fmxr fpexc, %0"::"r"(tmp));
 	
 	
 	while (1);
