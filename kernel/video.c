@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 #define data_memory_barrier() asm volatile ("mcr p15,#0,%[zero],c7,c10,#5" : : [zero] "r" (0))
-#define cache_flush() asm volatile ("mcr p15,#0,%[zero],c7,c14,#0" : : [zero] "r" (0))
+#define cache_invalidate() asm volatile ("mcr p15,#0,%[zero],c7,c14,#0" : : [zero] "r" (0))
 
 
 /* status register flags */
@@ -51,7 +51,7 @@ void mbox_send(int channel, uint32_t data)
 	while (status & MBOX_TX_FULL);
 
 	data_memory_barrier();
-	*mbox_write = data;				
+	*mbox_write = data;
 }
 
 
