@@ -31,10 +31,10 @@ SECTIONS
     
     .data1 : { *(.data1) }
     
-    __bss_start__ = .;
     
     .bss ALIGN(32):
     {
+    __bss_start__ = .;
 	*(.bss)
 	*(.bss.*)
 	*(.gnu.linkonce.b.*)
