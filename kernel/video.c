@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 
+#define data_synchronization_barrier() asm volatile ("mcr p15,#0,%[zero],c7,c10,#4" : : [zero] "r" (0))
 #define data_memory_barrier() asm volatile ("mcr p15,#0,%[zero],c7,c10,#5" : : [zero] "r" (0))
 #define cache_invalidate() asm volatile ("mcr p15,#0,%[zero],c7,c14,#0" : : [zero] "r" (0))
 
@@ -24,10 +25,13 @@ uint32_t mbox_recv(int channel)
 		do
 		{
 			status = *mbox_status;
+			data_synchronization_barrier();
 		}
 		while (status & MBOX_RX_EMPTY);
 
+		data_memory_barrier();
 		response = *mbox_read;
+		data_memory_barrier();
 	}
 	while ((response & MBOX_CHANMASK) != channel);
 
@@ -47,6 +51,7 @@ void mbox_send(int channel, uint32_t data)
 	do
 	{
 		status = *mbox_status;
+		data_synchronization_barrier();
 	}
 	while (status & MBOX_TX_FULL);
 
