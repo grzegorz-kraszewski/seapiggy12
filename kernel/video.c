@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+#include "debug.h"
+
 #define data_synchronization_barrier() asm volatile ("mcr p15,#0,%[zero],c7,c10,#4" : : [zero] "r" (0))
 #define data_memory_barrier() asm volatile ("mcr p15,#0,%[zero],c7,c10,#5" : : [zero] "r" (0))
 #define cache_invalidate() asm volatile ("mcr p15,#0,%[zero],c7,c14,#0" : : [zero] "r" (0))
@@ -65,18 +67,22 @@ uint32_t FBReq[24] __attribute__((aligned(16)));
 
 int SetVideoMode(int width, int height)
 {
+	uint32_t *d;
+	uint32_t *fb;
+	uint32_t i;
+
 	FBReq[0] = 88;             /* message length in bytes */
 	FBReq[1] = 0;              /* message is a request */
 	FBReq[2] = 0x00048003;     /* display dimensions */
 	FBReq[3] = 8;              /* tag data field size */
 	FBReq[4] = 0;              /* tag is a request */
-	FBReq[5] = 640;            /* display width */
-	FBReq[6] = 512;            /* display height */
+	FBReq[5] = 320;            /* display width */
+	FBReq[6] = 256;            /* display height */
 	FBReq[7] = 0x00048004;     /* framebuffer dimensions */
 	FBReq[8] = 8;              /* tag data field size */
 	FBReq[9] = 0;              /* tag is a request */
-	FBReq[10] = 640;           /* framebuffer width */
-	FBReq[11] = 512;           /* framebuffer height */
+	FBReq[10] = 320;           /* framebuffer width */
+	FBReq[11] = 256;           /* framebuffer height */
 	FBReq[12] = 0x00048005;    /* framebufer bitdepth */
 	FBReq[13] = 4;             /* tag data field size */
 	FBReq[14] = 0;             /* tag is a request */
@@ -89,5 +95,19 @@ int SetVideoMode(int width, int height)
 	FBReq[21] = 0;             /* endtag */
 	
 	mbox_send(8, (uint32_t)FBReq);
+	d = (uint32_t*)mbox_recv(8);
+
+	while (*d++ != 0x00040001);
+
+	/* framebuffer simple test to be discarded later */
+
+	fb = (uint32_t*)(d[2] & 0x3FFFFFFF);
+
+	for (i = 0; i < 320; i++) fb[i] = 0x00FF8080;
+	for (i = 255 * 320; i < 256 * 320; i++) fb[i] = 0x00FF8080;
+	
+	/* just mini UART test */
+
+	kputs("Ta wiadomosc na pewno cala sie nie zmiescila w buforze FIFO.\r\n");
 	return 0;
 }
