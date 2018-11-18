@@ -145,3 +145,24 @@ kputs:			LDR		r3,=AUX_BASE
 				BEQ		.L2
 				STR		r1,[r3,#AUXMUIO]		/* write byte to FIFO */
 				B		kputs
+
+/*--------------------------------------------------------*/
+/* ktime() - reads 64-bit VideoCore free running counter. */
+/*--------------------------------------------------------*/
+
+VCTIMER_BASE	= 0x20003000
+VCTIMLO			= 0x04
+VCTIMHI			= 0x08
+
+				.xdef ktime
+				.type ktime,%function
+
+ktime:			LDR		r3,=VCTIMER_BASE
+				DSB
+.L3:			LDR		r2,[r3,#VCTIMLO]
+				LDR		r1,[r3,#VCTIMHI]
+				LDR		r0,[r3,#VCTIMLO]
+				CMP		r2,r0
+				BCS		.L3
+				BX		lr
+

@@ -108,6 +108,16 @@ int SetVideoMode(int width, int height)
 	
 	/* just mini UART test */
 
-	kputs("Ta wiadomosc na pewno cala sie nie zmiescila w buforze FIFO.\r\n");
+	kputs("VC timer = $");
+	khex64(ktime());
+	kputs(".\r\nkhex32() test with value $FEDCBA98: $");
+	khex32(0xFEDCBA98);
+	kputs(".\r\n");
+	kputs("khex64() test with value $FEDCBA9876543210: $");
+	khex64(0xFEDCBA9876543210);
+	kputs(".\r\n");
+	kputs("VC timer = $");
+	khex64(ktime());
+	kputs(".\r\n");
 	return 0;
 }
