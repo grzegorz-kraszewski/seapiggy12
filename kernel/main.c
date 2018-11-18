@@ -1,5 +1,7 @@
 #include <stdint.h>
 
+#include "video.h"
+
 
 extern uint32_t __bss_start__, __bss_end__;
 
@@ -37,6 +39,6 @@ void Main(void)
 	tmp = (1 << 30); // The EN bit
 	asm volatile("fmxr fpexc, %0"::"r"(tmp));
 	
-	
+	SetVideoMode(640, 512);	
 	while (1);
 }
