@@ -5,7 +5,18 @@
 
 
 _start:			LDR		r1,=_start
-				MOV		sp,r1
+				MOV		sp,r1                   /* stack setup */
+
+				MRC		p15,#0,r0,c1,c0,#0      /* processor setup */
+				ORR		r0,r0,#0x00001000       /* L1 I-Cache on */
+				ORR		r0,r0,#0x00000004       /* L1 D-Cache on */
+				ORR		r0,r0,#0x00000800       /* branch prediction on */
+				ORR		r0,r0,#0x00000002       /* strict alignment exception on */
+				BIC		r0,r0,#0x00400000       /* disable unaligned access */
+				MCR		p15,#0,r0,c1,c0,#0
+
+
+
 /*
 				LDR		r1,=__bss_start
 				LDR		r2,=__bss_size
