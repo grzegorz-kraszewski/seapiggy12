@@ -118,14 +118,14 @@ Wait200:		MOV		r0,#200
 
 kputs:			LDR		r3,=AUX_BASE
 				MCR		p15,#0,r2,c7,c10,#5     /* memory barrier before accessing a peripherial */
-				LDRB	r1,[r0],#1
+.L2:			LDRB	r1,[r0],#1
 				CMP		r1,#0
 				BXEQ	lr
-.L2:			LDR		r2,[r3,#AUXMULSR]
+.L3:			LDR		r2,[r3,#AUXMULSR]
 				ANDS	r2,r2,#32               /* bit 5 clear = FIFO full */
-				BEQ		.L2
+				BEQ		.L3
 				STR		r1,[r3,#AUXMUIO]		/* write byte to FIFO */
-				B		kputs
+				B		.L2
 
 /*--------------------------------------------------------*/
 /* ktime() - reads 64-bit VideoCore free running counter. */
@@ -140,10 +140,9 @@ VCTIMHI			= 0x08
 
 ktime:			LDR		r3,=VCTIMER_BASE
 				MCR		p15,#0,r2,c7,c10,#5     /* memory barrier before accessing a peripherial */
-.L3:			LDR		r2,[r3,#VCTIMLO]
+.L4:			LDR		r2,[r3,#VCTIMLO]
 				LDR		r1,[r3,#VCTIMHI]
 				LDR		r0,[r3,#VCTIMLO]
 				CMP		r2,r0
-				BCS		.L3
+				BCS		.L4
 				BX		lr
-
