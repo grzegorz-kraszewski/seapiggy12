@@ -3,27 +3,8 @@
 				.xdef	_start
 				.xref	Main
 
-				/*------------------------------------------------------*/
-				/* Data Synchronization Barrier                         */
-				/* finishes all memory accesses before next instruction */
-				/*------------------------------------------------------*/
 
-				.macro DSB
-				MCR		p15,#0,r2,c7,c10,#4
-				.endm
-
-				/*--------------------------------------------------------*/
-				/* Data Memory Barrier                                    */
-				/* finishes all memory accesses before next memory access */
-				/*--------------------------------------------------------*/
-
-				.macro DMB
-				MCR		p15,#0,r2,c7,c10,#5
-				.endm
-
-
-_start:
-				LDR		r1,=_start
+_start:			LDR		r1,=_start
 				MOV		sp,r1
 /*
 				LDR		r1,=__bss_start
@@ -66,7 +47,7 @@ MiniUart:
 				MOV		r3,lr
 				MOV		r2,#0
 				LDR		r1,=GPIO_BASE
-				DSB
+				MCR		p15,#0,r2,c7,c10,#5     /* memory barrier before accessing a peripherial */
 				STR		r2,[r1,#GPPUD]          /* no pull-up, no pull-down */
 				BL		Wait200
 				MOV		r2,#0x00004000          /* bit 14 */
@@ -87,7 +68,7 @@ MiniUart:
 
 				LDR		r1,=AUX_BASE
 				MOV		r2,#1
-				DSB
+				MCR		p15,#0,r2,c7,c10,#5     /* memory barrier before accessing a peripherial */
 				STR		r2,[r1,#AUXENB]
 
 /* Clear RX and TX FIFO buffers. */
@@ -136,7 +117,7 @@ Wait200:		MOV		r0,#200
 				.type	kputs,%function
 
 kputs:			LDR		r3,=AUX_BASE
-				DSB
+				MCR		p15,#0,r2,c7,c10,#5     /* memory barrier before accessing a peripherial */
 				LDRB	r1,[r0],#1
 				CMP		r1,#0
 				BXEQ	lr
@@ -158,7 +139,7 @@ VCTIMHI			= 0x08
 				.type ktime,%function
 
 ktime:			LDR		r3,=VCTIMER_BASE
-				DSB
+				MCR		p15,#0,r2,c7,c10,#5     /* memory barrier before accessing a peripherial */
 .L3:			LDR		r2,[r3,#VCTIMLO]
 				LDR		r1,[r3,#VCTIMHI]
 				LDR		r0,[r3,#VCTIMLO]
