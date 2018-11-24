@@ -1,3 +1,17 @@
+/*-------------------*/
+/* SeaPiggy 12 boot. */
+/*-------------------*/
+
+GPIO_BASE		= 0x20200000
+
+GPFSEL0			= 0x00    /* alternative function select for GPIO 0-9 */
+GPFSEL1			= 0x04    /* alternative function select for GPIO 10-19 */
+GPSET0			= 0x1C    /* setting pins high */
+GPCLR0			= 0x28    /* setting pins low */
+GPPUD			= 0x94    /* pull-up/down control */
+GPPUDCLK0		= 0x98    /* pull-up/down apply */
+
+
 				.section ".text"
 
 				.xdef	_start
@@ -28,20 +42,19 @@ clearing:
 bss_cleared:
 */
 				BL		MiniUart
+				BL		Pins
+				BL		SquareWave		/* test, sends square wave to GPIO 6 */
 				BL		Main
 infinity:
 				B		infinity
 
 /*=================================================*/
 
+/*--------------------------*/
 /* Mini UART initialization */
+/*--------------------------*/
 
-GPIO_BASE		= 0x20200000
 AUX_BASE		= 0x20215000
-
-GPPUD			= 0x94    /* pull-up/down control */
-GPPUDCLK0		= 0x98    /* pull-up/down apply */
-GPFSEL1			= 0x04    /* alternative function select */
 
 AUXENB			= 0x04
 AUXMUIO			= 0x40    /* UART data */
@@ -108,6 +121,33 @@ MiniUart:
 				BX		r3
 
 
+/*--------------------------------------------*/
+/* Pins() - initialization of used GPIO pins. */
+/*--------------------------------------------*/
+
+Pins:			MOV		r3,lr
+				LDR		r1,=GPIO_BASE
+				MOV		r2,#0
+				MCR		p15,#0,r2,c7,c10,#5     /* memory barrier before accessing a peripherial */
+				STR		r2,[r1,#GPPUD]          /* no pull-up, no pull-down */
+				BL		Wait200
+				MOV		r2,#0x00000060          /* GPIO 5 and 6 */
+				STR		r2,[r1,#GPPUDCLK0]
+				BL		Wait200
+				MOV		r2,#0
+				STR		r2,[r1,#GPPUDCLK0]
+
+/* Set GPIO 5 as input and GPIO 6 as output. */
+
+				LDR		r2,[r1,#GPFSEL0]        /* currently selected functions */
+				BIC		r2,r2,#0x001C0000       /* clear 20:18 field for GPIO6 */
+				ORR		r2,r2,#0x00040000       /* set 20:18 to 001 = output */
+				BIC		r2,r2,#0x00038000       /* clear 17:15 field for GPIO5, 000 = input, no ORR needed */
+				STR		r2,[r1,#GPFSEL0]
+
+				BX		r3
+
+
 /*------------------------------------------------------*/
 /* Wait200() - repeats NOP 200 times to create a delay. */
 /*------------------------------------------------------*/
@@ -157,3 +197,22 @@ ktime:			LDR		r3,=VCTIMER_BASE
 				CMP		r2,r0
 				BCS		.L4
 				BX		lr
+
+/*----------------*/
+/* temporary test */
+/*----------------*/
+
+SquareWave:		LDR		r1,=GPIO_BASE
+				LDR		r4,=tmp
+				MOV		r2,#0x00000040          /* bit 6 */
+
+.L5:			STR		r2,[r1,#GPSET0]         /* goes high */
+				STR		r2,[r4]
+				/*BL		Wait200*/
+				STR		r2,[r1,#GPCLR0]         /* goes low */
+				/*BL		Wait200*/
+				B		.L5
+
+tmp:			.word	0x0;
+
+				/* never returns */
