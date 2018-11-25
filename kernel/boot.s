@@ -8,8 +8,14 @@ GPFSEL0			= 0x00    /* alternative function select for GPIO 0-9 */
 GPFSEL1			= 0x04    /* alternative function select for GPIO 10-19 */
 GPSET0			= 0x1C    /* setting pins high */
 GPCLR0			= 0x28    /* setting pins low */
+GPEDS0			= 0x40    /* event detect status register for GPIO 0-31 */
+GPAFEN0			= 0x88    /* asynchronous falling edge detector for GPIO 0-31 */
 GPPUD			= 0x94    /* pull-up/down control */
 GPPUDCLK0		= 0x98    /* pull-up/down apply */
+
+INT_BASE		= 0x2000B200
+
+INTFIQ			= 0x0C    /* FIQ enable and source select */
 
 
 				.section ".text"
@@ -17,8 +23,33 @@ GPPUDCLK0		= 0x98    /* pull-up/down apply */
 				.xdef	_start
 				.xref	Main
 
+_start:			B		start                   /* jump over the interrupts table */
 
-_start:			LDR		r1,=_start
+/*---------------------------------*/
+/* Interrupt vectors and FIQ code. */
+/*---------------------------------*/
+
+intvec:			B		0x8004 + _start;        /* reset */
+				B		0x8004 + infinity       /* undefined instruction */
+				B		0x8004 + infinity       /* SWI */
+				B		0x8004 + infinity		/* prefetch abort */
+				B		0x8004 + infinity		/* data abort */
+				B		0x8004 + infinity		/* reserved */
+				B		0x8004 + infinity		/* IRQ */
+
+				/* FIQ is the last vector, so handler can be placed just here. */
+
+				MOV		r8,#0x20000000
+				ORR		r8,#0x00200000			/* GPIO base */
+				MOV		r9,#0x40                /* pin 6 */
+				STR		r9,[r8,#GPSET0]			/* goes high */
+				MOV		r9,#0x20
+				STR		r9,[r8,#GPEDS0]         /* clear interrupt on pin 5 */
+				SUBS	pc,lr,#4
+
+/*---------------------------------*/
+
+start:			LDR		r1,=_start
 				MOV		sp,r1                   /* stack setup */
 
 				MRC		p15,#0,r0,c1,c0,#0      /* processor setup */
@@ -29,24 +60,49 @@ _start:			LDR		r1,=_start
 				BIC		r0,r0,#0x00400000       /* disable unaligned access */
 				MCR		p15,#0,r0,c1,c0,#0
 
+				/* copy interrupt vectors to $00000000 */
 
+				.set	intcode_len, (start - intvec) >> 2
 
-/*
-				LDR		r1,=__bss_start
-				LDR		r2,=__bss_size
-				CBZ		r2,bss_cleared
-clearing:
-				STR		r0,[r1],#4
-				SUB		r2,r2,#1
-				CBNZ	r2,clearing
-bss_cleared:
-*/
-				BL		MiniUart
+				MOV		r0,#0                   /* destination */
+				LDR		r1,=intvec              /* source */
+				MOV		r2,#intcode_len         /* word counter */
+intcopy:		LDR		r3,[r1],#4
+				STR		r3,[r0],#4
+				SUBS	r2,#1
+				BNE		intcopy
+
+				/* test, set pin 6 high */
+
+				LDR		r0,=GPIO_BASE
+				MOV		r1,#0x40
+				STR		r1,[r0,#GPSET0]
+
 				BL		Pins
-				BL		SquareWave		/* test, sends square wave to GPIO 6 */
+				BL		MiniUart
+
+				/* test, set pin 6 high, low, high */
+
+				LDR		r0,=GPIO_BASE
+				MOV		r1,#0x40
+				STR		r1,[r0,#GPSET0]
+				STR		r1,[r0,#GPCLR0]
+				STR		r1,[r0,#GPSET0]
+
+				BL		SetFiq
+
+				/* test, set pin 6 low, it triggers FIQ, which sets it back high */
+
+				LDR		r0,=GPIO_BASE
+				MOV		r1,#0x40
+				STR		r1,[r0,#GPCLR0]
+
 				BL		Main
 infinity:
 				B		infinity
+
+/*=================================================*/
+
 
 /*=================================================*/
 
@@ -145,6 +201,17 @@ Pins:			MOV		r3,lr
 				BIC		r2,r2,#0x00038000       /* clear 17:15 field for GPIO5, 000 = input, no ORR needed */
 				STR		r2,[r1,#GPFSEL0]
 
+				/* tests, set pull-up on pin 5 */
+
+				MOV		r2,#2                   /* pull-up */
+				STR		r2,[r1,#GPPUD]						
+				BL		Wait200
+				MOV		r2,#0x00000020          /* GPIO 5 */
+				STR		r2,[r1,#GPPUDCLK0]
+				BL		Wait200
+				MOV		r2,#0
+				STR		r2,[r1,#GPPUDCLK0]
+
 				BX		r3
 
 
@@ -156,6 +223,29 @@ Wait200:		MOV		r0,#200
 .L1:			NOP
 				ADDS	r0,#-1
 				BNE		.L1
+				BX		lr
+
+
+/*---------------------------------------------*/
+/* SetFiq()                                    */ 
+/* 1. Sets falling detection circuit on GPIO5. */
+/* 2. Sets this detection as FIQ source.       */
+/* 3. Enables FIQ.                             */ 
+/*---------------------------------------------*/
+
+SetFiq:			MOV		r0,#0x20                /* GPIO 5 */
+				LDR		r1,=GPIO_BASE
+				STR		r0,[r1,#GPAFEN0]        /* enable falling edge async detector */
+
+				MOV		r0,#0xB1                /* FIQ enable + source 49 (GPIO_INT0) */
+				LDR		r1,=INT_BASE
+				STR		r0,[r1,#INTFIQ]
+
+				MRS		r0,cpsr
+				ORR		r0,#0x80				/* disable IRQ */
+				BIC		r0,#0x40				/* enable FIQ */
+				MSR		cpsr,r0
+
 				BX		lr
 
 
@@ -197,22 +287,3 @@ ktime:			LDR		r3,=VCTIMER_BASE
 				CMP		r2,r0
 				BCS		.L4
 				BX		lr
-
-/*----------------*/
-/* temporary test */
-/*----------------*/
-
-SquareWave:		LDR		r1,=GPIO_BASE
-				LDR		r4,=tmp
-				MOV		r2,#0x00000040          /* bit 6 */
-
-.L5:			STR		r2,[r1,#GPSET0]         /* goes high */
-				STR		r2,[r4]
-				/*BL		Wait200*/
-				STR		r2,[r1,#GPCLR0]         /* goes low */
-				/*BL		Wait200*/
-				B		.L5
-
-tmp:			.word	0x0;
-
-				/* never returns */
