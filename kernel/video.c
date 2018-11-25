@@ -105,19 +105,6 @@ int SetVideoMode(int width, int height)
 
 	for (i = 0; i < 320; i++) fb[i] = 0x00FF8080;
 	for (i = 255 * 320; i < 256 * 320; i++) fb[i] = 0x00FF8080;
-	
-	/* just mini UART test */
 
-	kputs("VC timer = $");
-	khex64(ktime());
-	kputs(".\r\nkhex32() test with value $FEDCBA98: $");
-	khex32(0xFEDCBA98);
-	kputs(".\r\n");
-	kputs("khex64() test with value $FEDCBA9876543210: $");
-	khex64(0xFEDCBA9876543210);
-	kputs(".\r\n");
-	kputs("VC timer = $");
-	khex64(ktime());
-	kputs(".\r\n");
 	return 0;
 }
