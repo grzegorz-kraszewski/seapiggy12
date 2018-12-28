@@ -198,47 +198,6 @@ struct TagItem MonitorTagList[19] = {
 
 
 
-
-static void DumpNode(struct DispInfoNode *node)
-{
-	struct DispInfoNode *child;
-	struct TagItem *tag, *tagptr;
-	
-	Printf("Node @ $%08lx, child of $%08lx, key $%08lx. Data attached:\n", (ULONG)node, (ULONG)node->Parent,
-		node->Key); 
-	tagptr = &node->Tag;
-
-	while (tag = NextTagItem(&tagptr))
-	{
-		Printf("[$%08lx, $%08lx]\n", tag->ti_Tag, tag->ti_Data);
-	}
-
-	PutStr("----------------------\n");
-	
-	Printf("Node overscan: (%ld x %ld) - (%ld, %ld).\n", node->Overscan.MinX, node->Overscan.MinY,
-	 node->Overscan.MaxX, node->Overscan.MaxY);
-
-	PutStr("----------------------\n");
-	 
-	for (child = node->Child; child; child = child->Succ)
-	{
-		DumpNode(child);
-	}
-}
-	
-	
-
-static void DataBaseDump(void)
-{
-	struct GfxBase *gfxbase = (struct GfxBase*)GfxBase;
-	
-	DumpNode((struct DispInfoNode*)gfxbase->DisplayInfoDataBase);
-}
-
-
-
-
-
 /****i* displayinfo/AddAsLastChild ******************************************
 * 
 * NAME
