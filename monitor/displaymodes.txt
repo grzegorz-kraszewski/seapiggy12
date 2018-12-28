@@ -1,0 +1,12 @@
+SeaPiggy display modes
+
+Unlike P96/CGX, which present huge list of modes of different resolutions,
+SeaPiggy follows native modes style and offers only 5 different modes, defined
+by number of physical monitor pixels constituting one logical pixel. Then
+adjusting logical screen size to physical display size is done via overscan.
+Modes are as follows:
+
+1. "Low Res" -  one logical pixel is 4 x 4 physical. Nominal logical size is
+320 x 256.
+
+2. "High Res" - logical pixel is 2 x 4. Nominal logical size is 640 x 256.
