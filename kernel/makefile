@@ -5,7 +5,7 @@ OBJCOPY = arm-none-eabi-objcopy
 CFLAGS = -O2 -mfpu=vfp -mfloat-abi=hard -march=armv6zk -mtune=arm1176jzf-s
 CFLAGS += -ffreestanding -nostdlib -Wall
 LDFLAGS = -nostdlib -nostartfiles --script=ldscript.lds
-OBJS = boot.o main.o video.o debug.o
+OBJS = boot.o main.o vccomm.o debug.o
 
 kernel.img: $(OBJS)
 	$(LD) $(LDFLAGS) -o kernel.o $^
@@ -21,6 +21,6 @@ boot.o: boot.s
 	$(CC) $(CFLAGS) -c $<
 
 debug.o: debug.c debug.h
-main.o: main.c video.h
-video.o: video.c debug.h
+main.o: main.c vccomm.h
+vccomm.o: vccomm.c vccomm.h debug.h
 
