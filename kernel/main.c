@@ -1,7 +1,10 @@
 #include <stdint.h>
 
-#include "video.h"
+#include "vccomm.h"
 #include "debug.h"
+
+volatile uint32_t Fifo;
+volatile uint32_t b[16];
 
 
 extern uint32_t __bss_start__, __bss_end__;
@@ -17,11 +20,29 @@ static void BssClear(void)
 
 #endif
 
+/*----------------------------------------------------------------------------*/
+
+static void AllocatorSetup(void)
+{
+	void *low_mem, *high_mem;
+	struct ArmMemory mem;
+
+	GetArmMemory(&mem);
+	low_mem = &__bss_end__;
+	high_mem = mem.BlockStart + mem.BlockSize;
+	kputs("Initial free memory block from $");
+	khex32((uint32_t)low_mem);
+	kputs(" to $");
+	khex32((uint32_t)(high_mem - 1));
+	kputs(", $");
+	khex32((uint32_t)(high_mem - low_mem));
+	kputs(" bytes.\r\n");	
+}
+
+/*----------------------------------------------------------------------------*/
+
+
 void Main(void)
 {
-	uint32_t i;
-
-	kputs("Main() reached.\r\n");
-
-	while (1);
+	AllocatorSetup();
 }
