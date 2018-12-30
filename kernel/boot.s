@@ -2,13 +2,54 @@
 /* SeaPiggy 12 boot. */
 /*-------------------*/
 
+/* GPIO assignments
+
+GPIO  function  pull  description
+---------------------------------
+  0    unused   def.  reserved 
+  1    unused   def.  reserved
+  2     input   none  IORD from Amiga
+  3     input   none  SPARE_CS from Amiga, triggers FIQ
+  4     input   none  A2 from Amiga
+  5    unused   def.  unused
+  6     input   none  D16 (D0) from Amiga
+  7     input   none  D17 (D1) from Amiga 
+  8     input   none  D18 (D2) from Amiga
+  9     input   none  D19 (D3) from Amiga
+ 10     input   none  D20 (D4) from Amiga
+ 11     input   none  D21 (D5) from Amiga
+ 12     input   none  D22 (D6) from Amiga
+ 13     input   none  D23 (D7) from Amiga
+ 14      UART   def.  TxD for debug
+ 15     input   none  A3 from Amiga
+ 16    output   none  D16 (D0) to Amiga
+ 17    output   none  D17 (D1) to Amiga
+ 18    output   none  D18 (D2) to Amiga
+ 19    output   none  D19 (D3) to Amiga
+ 20    output   none  D20 (D4) to Amiga
+ 21    output   none  D21 (D5) to Amiga
+ 22    output   none  D22 (D6) to Amiga
+ 23    output   none  D23 (D7) to Amiga
+ 24    output   down  INT6 to Amiga
+ 25    unused   def.  NC
+ 26    unused   def.  NC
+ 27    unused   def.  NC
+ 28    unused   def.  NC
+ 29    unused   def.  NC
+ 30    unused   def.  NC
+ 31    unused   def.  NC
+*/
+
 GPIO_BASE		= 0x20200000
 
 GPFSEL0			= 0x00    /* alternative function select for GPIO 0-9 */
 GPFSEL1			= 0x04    /* alternative function select for GPIO 10-19 */
-GPSET0			= 0x1C    /* setting pins high */
-GPCLR0			= 0x28    /* setting pins low */
+GPFSEL2			= 0x08    /* alternative function select for GPIO 20-29 */
+GPSET0			= 0x1C    /* setting output pins high */
+GPCLR0			= 0x28    /* setting output pins low */
+GPLEV0			= 0x34    /* pin input levels */
 GPEDS0			= 0x40    /* event detect status register for GPIO 0-31 */
+GPFEN0			= 0x58
 GPAFEN0			= 0x88    /* asynchronous falling edge detector for GPIO 0-31 */
 GPPUD			= 0x94    /* pull-up/down control */
 GPPUDCLK0		= 0x98    /* pull-up/down apply */
@@ -22,6 +63,7 @@ INTFIQ			= 0x0C    /* FIQ enable and source select */
 
 				.xdef	_start
 				.xref	Main
+				.xref	Fifo
 
 _start:			B		start                   /* jump over the interrupts table */
 
@@ -38,13 +80,15 @@ intvec:			B		0x8004 + _start;        /* reset */
 				B		0x8004 + infinity		/* IRQ */
 
 				/* FIQ is the last vector, so handler can be placed just here. */
+				/* FIQ banked registers layout (preloaded in SetFiq()):        */
+				/* r8 = GPIO base (0x20200000)                                 */
+				/* r9 = write pointer to FIFO                                  */
 
-				MOV		r8,#0x20000000
-				ORR		r8,#0x00200000			/* GPIO base */
-				MOV		r9,#0x40                /* pin 6 */
-				STR		r9,[r8,#GPSET0]			/* goes high */
-				MOV		r9,#0x20
-				STR		r9,[r8,#GPEDS0]         /* clear interrupt on pin 5 */
+				MOV		r10,#0x08
+				STR		r10,[r8,#GPEDS0]         /* clear interrupt on pin 3 */
+				LDR		r10,[r8,#GPLEV0]
+				MOV		r10,r10,LSR #6
+				STRB	r10,[r9],#1
 				SUBS	pc,lr,#4
 
 /*---------------------------------*/
@@ -72,37 +116,12 @@ intcopy:		LDR		r3,[r1],#4
 				SUBS	r2,#1
 				BNE		intcopy
 
-				/* test, set pin 6 high */
-
-				LDR		r0,=GPIO_BASE
-				MOV		r1,#0x40
-				STR		r1,[r0,#GPSET0]
-
 				BL		Pins
 				BL		MiniUart
-
-				/* test, set pin 6 high, low, high */
-
-				LDR		r0,=GPIO_BASE
-				MOV		r1,#0x40
-				STR		r1,[r0,#GPSET0]
-				STR		r1,[r0,#GPCLR0]
-				STR		r1,[r0,#GPSET0]
-
 				BL		SetFiq
-
-				/* test, set pin 6 low, it triggers FIQ, which sets it back high */
-
-				LDR		r0,=GPIO_BASE
-				MOV		r1,#0x40
-				STR		r1,[r0,#GPCLR0]
-
 				BL		Main
 infinity:
 				B		infinity
-
-/*=================================================*/
-
 
 /*=================================================*/
 
@@ -121,60 +140,37 @@ AUXMUCNTL		= 0x60
 AUXMUBAUD		= 0x68
 
 MiniUart:
-
-/* Remove possible pull-up/down from GPIO14 pin. */
-
-				MOV		r3,lr
-				MOV		r2,#0
-				LDR		r1,=GPIO_BASE
-				MCR		p15,#0,r2,c7,c10,#5     /* memory barrier before accessing a peripherial */
-				STR		r2,[r1,#GPPUD]          /* no pull-up, no pull-down */
-				BL		Wait200
-				MOV		r2,#0x00004000          /* bit 14 */
-				STR		r2,[r1,#GPPUDCLK0]
-				BL		Wait200
-				MOV		r2,#0
-				STR		r2,[r1,#GPPUDCLK0]
-				STR		r2,[r1,#GPPUD]
-
-/* Set alternative function 5 for GPIO14 (miniUART TxD). */
-
-				LDR		r2,[r1,#GPFSEL1]        /* currently selected functions */
-				BIC		r2,r2,#0x00007000       /* clear 14:12 field for GPIO14 */
-				ORR		r2,r2,#0x00002000       /* set 14:12 to 010 = alt func 5 */
-				STR		r2,[r1,#GPFSEL1]
-
-/* Enable mini UART. */
+				/* Enable mini UART. Pin 14 function is already set in Pins(). */
 
 				LDR		r1,=AUX_BASE
 				MOV		r2,#1
 				MCR		p15,#0,r2,c7,c10,#5     /* memory barrier before accessing a peripherial */
 				STR		r2,[r1,#AUXENB]
 
-/* Clear RX and TX FIFO buffers. */
+				/* Clear RX and TX FIFO buffers. */
 
 				MOV		r2,#0
 				STR		r2,[r1,#AUXMUIER]
 
-/* Disable receiver and transmitter. */
+				/* Disable receiver and transmitter. */
 
 				STR		r2,[r1,#AUXMUCNTL]
 
-/* Set baudrate to about 115200 bps. */
+				/* Set baudrate to about 115200 bps. */
 
 				LDR		r2,=270
 				STR		r2,[r1,#AUXMUBAUD]
 
-/* Set 8 data bits. */
+				/* Set 8 data bits. */
 
 				MOV		r2,#3
 				STR		r2,[r1,#AUXMULCR]
 
-/* Enable transmitter (only). */
+				/* Enable transmitter (only). */
 
 				MOV		r2,#2
 				STR		r2,[r1,#AUXMUCNTL]
-				BX		r3
+				BX		lr
 
 
 /*--------------------------------------------*/
@@ -185,32 +181,49 @@ Pins:			MOV		r3,lr
 				LDR		r1,=GPIO_BASE
 				MOV		r2,#0
 				MCR		p15,#0,r2,c7,c10,#5     /* memory barrier before accessing a peripherial */
+
+				/* pull-up and pull-down config */
+
 				STR		r2,[r1,#GPPUD]          /* no pull-up, no pull-down */
 				BL		Wait200
-				MOV		r2,#0x00000060          /* GPIO 5 and 6 */
+				LDR		r2,=0x00FFFFDC			/* GPIO 23-6, 4-2 */
 				STR		r2,[r1,#GPPUDCLK0]
 				BL		Wait200
 				MOV		r2,#0
 				STR		r2,[r1,#GPPUDCLK0]
 
-/* Set GPIO 5 as input and GPIO 6 as output. */
+				/* Set functions for pins 0 - 9 */
 
 				LDR		r2,[r1,#GPFSEL0]        /* currently selected functions */
-				BIC		r2,r2,#0x001C0000       /* clear 20:18 field for GPIO6 */
-				ORR		r2,r2,#0x00040000       /* set 20:18 to 001 = output */
-				BIC		r2,r2,#0x00038000       /* clear 17:15 field for GPIO5, 000 = input, no ORR needed */
+				BIC		r2,r2,#0x3F000000       /* GPIO 9,8,7,6,4,3,2 = inputs */
+				BIC		r2,r2,#0x00FC0000       /* GPIO 5,0,1 = not modified */
+				BIC		r2,r2,#0x00007F00
+				BIC		r2,r2,#0x000000C0
 				STR		r2,[r1,#GPFSEL0]
 
-				/* tests, set pull-up on pin 5 */
+				/* Set functions for pins 10 - 19 */
 
-				MOV		r2,#2                   /* pull-up */
-				STR		r2,[r1,#GPPUD]						
-				BL		Wait200
-				MOV		r2,#0x00000020          /* GPIO 5 */
-				STR		r2,[r1,#GPPUDCLK0]
-				BL		Wait200
-				MOV		r2,#0
-				STR		r2,[r1,#GPPUDCLK0]
+				LDR		r2,[r1,#GPFSEL1]        /* currently selected functions */
+				BIC		r2,r2,#0x3F000000       /* GPIO 19,18,17,16 = outputs */
+				BIC		r2,r2,#0x00FF0000       /* GPIO 15,13,12,11,10 = inputs */
+				BIC		r2,r2,#0x0000FF00       /* GPIO 14 = alt5 (mini UART TxD) */
+				BIC		r2,r2,#0x000000FF
+				ORR		r2,r2,#0x09000000
+				ORR		r2,r2,#0x00240000
+				ORR		r2,r2,#0x00002000
+				STR		r2,[r1,#GPFSEL1]
+
+				/* Set functions for pins 20 - 29 */
+
+				LDR		r2,[r1,#GPFSEL2]        /* currently selected functions */
+				BIC		r2,r2,#0x00007F00       /* GPIO 24,23,22,21,20 = outputs */
+				BIC		r2,r2,#0x000000FF
+				ORR		r2,r2,#0x00001200
+				BIC		r2,r2,#0x00000049
+				STR		r2,[r1,#GPFSEL2]
+
+				MOV		r0,#0x01000000
+				STR		r0,[r1,#GPSET0]         /* test, set GPIO24 */
 
 				BX		r3
 
@@ -228,23 +241,26 @@ Wait200:		MOV		r0,#200
 
 /*---------------------------------------------*/
 /* SetFiq()                                    */ 
-/* 1. Sets falling detection circuit on GPIO5. */
+/* 1. Sets falling detection circuit on GPIO3. */
 /* 2. Sets this detection as FIQ source.       */
 /* 3. Enables FIQ.                             */ 
 /*---------------------------------------------*/
 
-SetFiq:			MOV		r0,#0x20                /* GPIO 5 */
+SetFiq:			MOV		r0,#0x08                /* GPIO 3 */
 				LDR		r1,=GPIO_BASE
-				STR		r0,[r1,#GPAFEN0]        /* enable falling edge async detector */
+				STR		r0,[r1,#GPFEN0]         /* enable falling edge async detector */
 
 				MOV		r0,#0xB1                /* FIQ enable + source 49 (GPIO_INT0) */
 				LDR		r1,=INT_BASE
 				STR		r0,[r1,#INTFIQ]
 
-				MRS		r0,cpsr
-				ORR		r0,#0x80				/* disable IRQ */
-				BIC		r0,#0x40				/* enable FIQ */
-				MSR		cpsr,r0
+				/* preloading FIQ registers */
+
+				CPSID	if,#17					/* disable IRQ & FIQ, enter FIQ mode */
+				LDR		r8,=GPIO_BASE
+				LDR		r9,=Fifo
+				MOV		r11,#0
+				CPSIE	f,#19					/* back to supervisor, enable FIQ */
 
 				BX		lr
 
