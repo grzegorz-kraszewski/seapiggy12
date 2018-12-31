@@ -1,4 +1,8 @@
-/* framebuffer setup */
+/*---------------------------------------------*/
+/* SeaPiggy12                                  */ 
+/* Communication with VideoCore using mailbox. */
+/* RastPort 2018                               */
+/*---------------------------------------------*/
 
 #include "vccomm.h"
 #include "debug.h"
