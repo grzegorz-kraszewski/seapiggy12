@@ -285,11 +285,11 @@ void SplitBlock(struct FreeHeader *block, uint32_t newsize)
 
 	currsize = block->Size & ~FLAGS_MASK;
 	lastflag = block->Size & LAST_IN_POOL;
-	remainder = (struct FreeHeader*)((void*)block + newsize);
+	remainder = (struct FreeHeader*)((uint8_t*)block + newsize);
 
 	if (!lastflag)
 	{
-		nextphys = (struct BusyHeader*)((void*)block + currsize); 
+		nextphys = (struct BusyHeader*)((uint8_t*)block + currsize); 
 		nextphys->PrevPhys = (struct BusyHeader*)remainder;
 	}
 
@@ -360,7 +360,7 @@ void* AllocMem(uint32_t size)
 		if (remainder >= 16) SplitBlock(block, rawsize);
 		
 		block->Size |= BLOCK_BUSY;
-		return block + sizeof(struct BusyHeader);
+		return (void*)((uint8_t*)block + sizeof(struct BusyHeader));
 	}
 
 	return NULL;
@@ -393,7 +393,7 @@ void ListBlocksPhysically(void *lowmem)
 		kputs(" bytes.\r\n");
 
 		if (size & LAST_IN_POOL) block = NULL;
-		else block = (struct FreeHeader*)((void*)block + clsize);
+		else block = (struct FreeHeader*)((uint8_t*)block + clsize);
 	}
 }
 
@@ -432,7 +432,7 @@ void StartAllocator(void *lowmem, uint32_t size)
 
 	root = (struct MemRoot*)lowmem;
 	size -= sizeof(struct MemRoot);
-	lowmem += sizeof(struct MemRoot);
+	lowmem = (uint8_t*)lowmem + sizeof(struct MemRoot);
 
 	root->BitMap[0] = 0;
 	root->BitMap[1] = 0;

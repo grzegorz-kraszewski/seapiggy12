@@ -25,12 +25,12 @@ static void BssClear(void)
 
 static void AllocatorSetup(void)
 {
-	void *low_mem, *high_mem;
+	uint8_t *low_mem, *high_mem;
 	struct ArmMemory mem;
 
 	GetArmMemory(&mem);
-	low_mem = &__bss_end__;
-	high_mem = mem.BlockStart + mem.BlockSize;
+	low_mem = (uint8_t*)&__bss_end__;
+	high_mem = (uint8_t*)mem.BlockStart + mem.BlockSize;
 	kputs("Initial free memory block from $");
 	khex32((uint32_t)low_mem);
 	kputs(" to $");
