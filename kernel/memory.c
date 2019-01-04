@@ -199,7 +199,6 @@ static struct FreeHeader* FindFreeBlock(uint32_t size)
 			break;
 		}
 	}
-	while (wordindex-- > 0)	
 	
 	if (bitindex < 32)
 	{
