@@ -15,6 +15,9 @@
 #define NULL 0
 
 
+/******* TODO: FreeMem() and block merging. ********/
+
+
 /*
 Allocator uses modified TLSF. There are 32 logarithmic ranges. As RPi Zero has
 512 MB of memory, three largest ranges are unused. Also four smallest ranges
@@ -46,10 +49,7 @@ linear subranges each, so there are 100 pointers total.
 
 #define BLOCK_BUSY 2
 #define LAST_IN_POOL 1
-#define FLAG_MASK (BLOCK_BUSY | LAST_IN_POOL)
-
-
-static struct MemRoot *Allocator;
+#define FLAGS_MASK (BLOCK_BUSY | LAST_IN_POOL)
 
 
 struct FreeHeader
@@ -74,6 +74,8 @@ struct MemRoot
 	struct FreeHeader* Pointers[100];
 };
 
+
+static struct MemRoot *Allocator;
 
 
 
@@ -106,7 +108,7 @@ struct MemRoot
 *   It is assumed, that block size is always at least 16 bytes and it is less
 *   than 512 MB.
 *
-*****************************************************************************
+******************************************************************************
 */
 
 void InsertFreeBlock(struct FreeHeader *block, uint32_t size, struct BusyHeader *prevphys, uint32_t last)
@@ -140,7 +142,6 @@ void InsertFreeBlock(struct FreeHeader *block, uint32_t size, struct BusyHeader 
 }	
 
 
-
 /****i* memory/FindFreeBlock *************************************************
 * 
 * NAME
@@ -164,17 +165,18 @@ void InsertFreeBlock(struct FreeHeader *block, uint32_t size, struct BusyHeader 
 *   size - raw size of the block in bytes, including the header.
 *
 * OUTPUT
-*   block - pointer to free block or NULL if no matching block was found.
+*   block - address of pointer to free block or NULL if no matching block was
+*   found.
 *
 * NOTES
 *   The block is just located. It is not removed from free blocks list.
 *
-*****************************************************************************
+******************************************************************************
 */
 
-static struct FreeHeader* FindFreeBlock(uint32_t size)
+static struct FreeHeader** FindFreeBlock(uint32_t size)
 {
-	uint32_t range, subrange, wordindex, bitindex, mask, bmword;
+	uint32_t range, subrange, wordindex, bitindex, mask, bmword, ptrindex;
 
 	range = clz(size);
 	subrange = (size >> (29 - range)) & 3;
@@ -198,15 +200,100 @@ static struct FreeHeader* FindFreeBlock(uint32_t size)
 			bitindex = ctz(bmword);
 			break;
 		}
+
+		mask = ~0;
 	}
 	
 	if (bitindex < 32)
 	{
-		/* TODO: calculate pointer address from wordindex and bitindex. */
-		/* TODO: return pointer. */
+		ptrindex = (wordindex << 5) + bitindex - 16; 
+		return &Allocator->Pointers[ptrindex];
 	}
 
 	return NULL;
+}
+
+
+/****i* memory/ClearBitOnMap *************************************************
+* 
+* NAME
+*   ClearBitOnMap -- Clears a bit on the allocator bitmap.
+*
+* SYNOPSIS
+*   ClearBitOnMap(subrangeptr)
+*   void ClearBitOnMap(struct FreeHeader**);
+*
+* FUNCTION
+*   Locates bit in the allocator bitmap corresponding to given address of
+*   subrange pointer.
+*
+* INPUTS
+*   subrangeptr - address of subrange pointer
+*
+* OUTPUT
+*   None.
+*
+******************************************************************************
+*/
+
+void ClearBitOnMap(struct FreeHeader **subrangeptr)
+{
+	uint32_t bitindex, wordindex, mask;
+
+	bitindex = subrangeptr - Allocator->Pointers + 16;  /* 16 smallest subranges omitted */
+	wordindex = bitindex >> 5;
+	bitindex &= 31;
+	mask = 1 << bitindex;
+	Allocator->BitMap[wordindex] &= ~mask;
+}
+
+
+/****i* memory/SplitBlock ****************************************************
+* 
+* NAME
+*   SplitBlock -- Splits a memory block into two.
+*
+* SYNOPSIS
+*   SplitBlock(block, size);
+*   void SplitBlock(struct FreeHeader*, uint32_t);
+*
+* FUNCTION
+*   Splits a free memory block into two parts. The first one is truncated to
+*   specified size. The second one is the remainder. Free block header is
+*   created in it then it is added to the allocator as free block.
+*
+*   If the block being splitted is physically the last one in the pool,
+*   remainder block retains this property.
+*
+* INPUTS
+*   block - block to be splitted
+*   newsize - raw size of the first part, it is assumed this size is at least
+*     16 bytes less than current block size
+*
+* OUTPUT
+*   None.
+*
+******************************************************************************
+*/
+
+void SplitBlock(struct FreeHeader *block, uint32_t newsize)
+{
+	uint32_t currsize;
+	uint32_t lastflag;
+	struct FreeHeader *remainder;
+	struct BusyHeader *nextphys;
+
+	currsize = block->Size & ~FLAGS_MASK;
+	lastflag = block->Size & LAST_IN_POOL;
+	remainder = (struct FreeHeader*)((void*)block + newsize);
+
+	if (!lastflag)
+	{
+		nextphys = (struct BusyHeader*)((void*)block + currsize); 
+		nextphys->PrevPhys = (struct BusyHeader*)remainder;
+	}
+
+	InsertFreeBlock(remainder, currsize - newsize, (struct BusyHeader*)block, lastflag);
 }
 
 
@@ -235,23 +322,46 @@ static struct FreeHeader* FindFreeBlock(uint32_t size)
 *   Zero sized alloc is succesful and results in allocation of 8 bytes. Will
 *   be freed as usual.
 *
-*****************************************************************************
+******************************************************************************
 */
 
 void* AllocMem(uint32_t size)
 {
-	uint32_t rawsize;
-	struct FreeHeader *block;
+	uint32_t rawsize, remainder;
+	struct FreeHeader **blockptr;
 
 	if (size < 8) size = 8;
 	size = (size + 3) & ~3;
-	rawsize = size + 8;
+	rawsize = size + sizeof(struct BusyHeader);
 
-	block = FindFreeBlock(rawsize);
+	blockptr = FindFreeBlock(rawsize);
 
-	/* TODO: if block is found remove it from current list */
-	/* TODO: for precise match mark block as busy and return */
-	/* TODO: if block is larger, split it, return first part, insert second part back */
+	if (blockptr)
+	{
+		struct FreeHeader *block, *next;
+
+		/*--------------------------------------------*/
+		/* Remove the first block from subrange list. */
+		/*--------------------------------------------*/
+
+		block = *blockptr;
+		next = block->NextFree;               /* may be NULL */
+		*blockptr = next;
+
+		if (next) next->PrevFree = NULL;      /* next is now first */
+		else ClearBitOnMap(blockptr);         /* this block was the last free */
+
+		/*----------------------------------------*/
+		/* Check if block needs a split. Split if */
+		/* remainder would be at least 16 bytes.  */
+		/*----------------------------------------*/
+
+		remainder = (block->Size & ~FLAGS_MASK) - rawsize;
+		if (remainder >= 16) SplitBlock(block, rawsize);
+		
+		block->Size |= BLOCK_BUSY;
+		return block + sizeof(struct BusyHeader);
+	}
 
 	return NULL;
 }
@@ -272,7 +382,7 @@ void ListBlocksPhysically(void *lowmem)
 		uint32_t clsize;
 
 		size = block->Size;
-		clsize = size & ~FLAG_MASK;
+		clsize = size & ~FLAGS_MASK;
 
 		if (size & BLOCK_BUSY) kputs("Busy block @ $");
 		else kputs("Free block @ $");
@@ -286,8 +396,6 @@ void ListBlocksPhysically(void *lowmem)
 		else block = (struct FreeHeader*)((void*)block + clsize);
 	}
 }
-
-
 
 
 /****** memory/StartAllocator ************************************************
@@ -312,7 +420,7 @@ void ListBlocksPhysically(void *lowmem)
 * OUTPUT
 *   None.
 *
-*****************************************************************************
+******************************************************************************
 */
 
 void StartAllocator(void *lowmem, uint32_t size)
