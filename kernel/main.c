@@ -1,6 +1,7 @@
 #include <stdint.h>
 
 #include "vccomm.h"
+#include "memory.h"
 #include "debug.h"
 
 volatile uint32_t Fifo;
@@ -36,7 +37,8 @@ static void AllocatorSetup(void)
 	khex32((uint32_t)(high_mem - 1));
 	kputs(", $");
 	khex32((uint32_t)(high_mem - low_mem));
-	kputs(" bytes.\r\n");	
+	kputs(" bytes.\r\n");
+	StartAllocator(low_mem, high_mem - low_mem);	
 }
 
 /*----------------------------------------------------------------------------*/
