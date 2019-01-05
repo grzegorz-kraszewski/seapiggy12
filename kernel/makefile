@@ -3,7 +3,7 @@ AS = arm-none-eabi-as
 LD = arm-none-eabi-ld
 OBJCOPY = arm-none-eabi-objcopy
 CFLAGS = -O2 -mfpu=vfp -mfloat-abi=hard -march=armv6zk -mtune=arm1176jzf-s
-CFLAGS += -ffreestanding -nostdlib -Wall -Werror -pedantic
+CFLAGS += -ffreestanding -nostdlib -Wall -Wextra -Werror -Wpedantic
 LDFLAGS = -nostdlib -nostartfiles --script=ldscript.lds
 OBJS = boot.o main.o vccomm.o memory.o debug.o
 
