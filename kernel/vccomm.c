@@ -26,7 +26,7 @@
 
 /*----------------------------------------------------------------------------*/
 
-static uint32_t mbox_recv(int channel)
+static uint32_t mbox_recv(uint32_t channel)
 {
 	volatile uint32_t *mbox_read = (uint32_t*)0x2000B880;
 	volatile uint32_t *mbox_status = (uint32_t*)0x2000B898;
@@ -52,7 +52,7 @@ static uint32_t mbox_recv(int channel)
 
 /*----------------------------------------------------------------------------*/
 
-static void mbox_send(int channel, uint32_t data)
+static void mbox_send(uint32_t channel, uint32_t data)
 {
 	volatile uint32_t *mbox_write = (uint32_t*)0x2000B8A0;
 	volatile uint32_t *mbox_status = (uint32_t*)0x2000B898;
