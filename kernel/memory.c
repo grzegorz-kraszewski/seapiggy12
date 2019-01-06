@@ -79,6 +79,7 @@ static struct MemRoot *Allocator;
 
 
 
+
 /****i* memory/InsertFreeBlock ***********************************************
 * 
 * NAME
@@ -395,6 +396,78 @@ void ListBlocksPhysically(void *lowmem)
 		if (size & LAST_IN_POOL) block = NULL;
 		else block = (struct FreeHeader*)((uint8_t*)block + clsize);
 	}
+}
+
+
+int FirstInPool(struct BusyHeader *block)
+{
+	return (!block->PrevPhys);
+}
+
+
+int LastInPool(struct BusyHeader *block)
+{
+	return (block->Size & LAST_IN_POOL);
+}
+
+
+struct BusyHeader* NextPhysBlock(struct BusyHeader *block)
+{
+	return (struct BusyHeader*)((uint8_t*)block + (block->Size & ~FLAGS_MASK));
+}
+
+
+int PrevBlockFree(struct BusyHeader *block)
+{
+	return !(block->PrevPhys->Size & BLOCK_BUSY);
+}
+
+
+int NextBlockFree(struct BusyHeader *block)
+{
+	return !(NextPhysBlock(block)->Size & BLOCK_BUSY);
+}
+
+
+
+struct BusyHeader* MergeBack(struct BusyHeader *block)
+{
+	struct BusyHeader *previous;
+
+	previous = block->PrevPhys;
+	previous->Size += block->Size;   /* this also takes care of LAST_IN_POOL flag */
+	return previous;
+}
+
+
+struct BusyHeader* MergeForward(struct BusyHeader *block)
+{
+	struct BusyHeader *next;
+
+	next = NextPhysBlock(block);
+
+	if (!LastInPool(next))
+	{
+		struct BusyHeader *another;
+
+		another = NextPhysBlock(next);
+		another->PrevPhys = block;
+	}
+
+	block->Size += next->Size;   /* this also takes care of LAST_IN_POOL flag */
+	return block;
+}
+
+
+void FreeMem(void *block)
+{
+	struct BusyHeader *real_block;
+
+	real_block = (struct BusyHeader*)block - 1;
+	real_block->Size &= ~BLOCK_BUSY;
+	if (!FirstInPool(real_block) && PrevBlockFree(real_block)) real_block = MergeBack(real_block);
+	if (!LastInPool(real_block) && NextBlockFree(real_block)) real_block = MergeForward(real_block);
+	//InsertFreeBlock(real_block);
 }
 
 
