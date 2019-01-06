@@ -127,8 +127,8 @@ int SetVideoMode(int width, int height)
 	FBReq[2] = 0x00048003;     /* display dimensions */
 	FBReq[3] = 8;              /* tag data field size */
 	FBReq[4] = 0;              /* tag is a request */
-	FBReq[5] = 320;            /* display width */
-	FBReq[6] = 256;            /* display height */
+	FBReq[5] = width;          /* display width */
+	FBReq[6] = height;         /* display height */
 	FBReq[7] = 0x00048004;     /* framebuffer dimensions */
 	FBReq[8] = 8;              /* tag data field size */
 	FBReq[9] = 0;              /* tag is a request */
