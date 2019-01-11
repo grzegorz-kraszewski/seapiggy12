@@ -5,6 +5,7 @@
 /*------------------------------*/
 
 #include <stdint.h>
+#include <stddef.h>
 #include "debug.h"
 
 #define clz(x) __builtin_clz((x))
@@ -51,88 +52,132 @@ linear subranges each, so there are 100 pointers total.
 #define LAST_IN_POOL 1
 #define FLAGS_MASK (BLOCK_BUSY | LAST_IN_POOL)
 
-
-struct FreeHeader
+struct Node
 {
-	uint32_t Size;                      /* bit 1 = free/busy, bit 0 = last in pool */
-	struct BusyHeader* PrevPhys;
-	struct FreeHeader* NextFree;        /* in given subrange */
-	struct FreeHeader* PrevFree;        /* in given subrange */
+	struct Node *Next;
+	struct Node *Prev;
 };
 
+struct List
+{
+	struct Node *Head;
+	struct Node *Tail;
+	struct Node *TailPred;
+};
 
 struct BusyHeader
 {
-	uint32_t Size;
+	uint32_t Size;                      /* bit 1 = free/busy, bit 0 = last in pool */
 	struct BusyHeader* PrevPhys;
 };
 
+struct FreeHeader
+{
+	struct BusyHeader Header;
+	struct Node Free;                   /* in given subrange */
+};
 
 struct MemRoot
 {
 	uint32_t BitMap[4];
-	struct FreeHeader* Pointers[100];
+	struct List Lists[100];
 };
 
 
 static struct MemRoot *Allocator;
 
 
+void InitList(struct List *list)
+{
+	list->Head = (struct Node*)&list->Tail;
+	list->Tail = NULL;
+	list->TailPred = (struct Node*)&list->Head;
+}
+
+
+int ListIsEmpty(struct List *list)
+{
+	return list->Head->Next == NULL;
+}
+
+
+struct Node* Remove(struct Node *node)
+{
+	node->Next->Prev = node->Prev;
+	node->Prev->Next = node->Next;
+	return node;
+}
+
+
+struct Node* RemHead(struct List *list)
+{
+	if (ListIsEmpty(list)) return NULL;
+	else return Remove(list->Head);
+}
+
+
+void Insert(struct Node *after, struct Node *node)
+{
+	after->Next->Prev = node;
+	node->Next = after->Next;
+	node->Prev = after;
+	after->Next = node;
+}
+
+
+void AddHead(struct List *list, struct Node *node)
+{
+	Insert((struct Node*)&list->Head, node);
+}
+ 
 
 
 /****i* memory/InsertFreeBlock ***********************************************
 * 
 * NAME
-*   InsertFreeBlock -- Inserts free block into allocator.
+*   InsertFreeBlock -- Inserts initialized free block into allocator.
 *
 * SYNOPSIS
-*   InsertFreeBlock(block, size, prevphys, last)
-*   void InsertFreeBlock(struct FreeHeader*, uint32_t, struct BusyHeader*,
-*     uint32_t);
+*   InsertFreeBlock(block)
+*   void InsertFreeBlock(struct FreeHeader*);
 *
 * FUNCTION
-*   Inserts free block of given address and size to the allocator. Address of
-*   physically adjacent previous block is passed as a parameter. Block range
-*   and subrange is calculated, then block is inserted as the first in
-*   subrange list. Bitmap is updated.
+*   Inserts free block of given address and size to the allocator. Block
+*   header should have initialized 'Size' field (with flags) and 'PrevPhys'
+*   pointer. Block range and subrange is calculated, then block is inserted as
+*   the first in subrange list. Bitmap is updated.
 *
 * INPUTS
 *   block - address of the block
-*   size - raw size of the block in bytes
-*   prevphys - address of previous adjacent block (free or busy)
-*	last - "last in pool" flag (0 or LAST_IN_POOL).
 *
 * OUTPUT
 *   None.
 *
 * NOTES
-*   It is assumed, that block size is always at least 16 bytes and it is less
-*   than 512 MB.
+*   It is assumed, that raw block size is always at least 16 bytes and it is
+*   less than 512 MB.
 *
 ******************************************************************************
 */
 
-void InsertFreeBlock(struct FreeHeader *block, uint32_t size, struct BusyHeader *prevphys, uint32_t last)
+void InsertFreeBlock(struct FreeHeader *block)
 {
-	struct FreeHeader** ptr;
-	uint32_t range, subrange, ptrindex, wordindex, bitindex, mask;
+	struct List* list;
+	uint32_t range, subrange, listindex, wordindex, bitindex, mask, size;
 
+	size = block->Header.Size;
 	range = clz(size);
 	subrange = (size >> (29 - range)) & 3;
 	range = 32 - range;
 
-	/* calculate pointer index for subrange */
+	/* calculate list array index for subrange */
 
-	ptrindex = (range << 2) + subrange - 16;
-	ptr = &Allocator->Pointers[ptrindex];
+	listindex = (range << 2) + subrange - 16;
+	list = &Allocator->Lists[listindex];
 
 	/* insert into subrange list */
 
-	block->Size = size | last;
-	block->PrevFree = NULL;
-	block->PrevPhys = prevphys;
-	block->NextFree = *ptr;
-	*ptr = block;
+	AddHead(list, &block->Free);
 
 	/* mark subrange in bitmap as having free blocks */
 
@@ -160,24 +205,22 @@ void InsertFreeBlock(struct FreeHeader *block, uint32_t size, struct BusyHeader 
 *      bits elsewhere.
 *   3. Bitmap is masked with the mask and rightmost '1' bit is located.
 *   4. This bit points to block subrange containing at least one free block.
-*   5. First block from the list of the above subrange is returned.
+*   5. First block from the list of the above subrange is removed from the
+*      list and returned.
+*   6. Block bitmap is updated if the block was last free in a given subrange.
 *
 * INPUTS
 *   size - raw size of the block in bytes, including the header.
 *
 * OUTPUT
-*   block - address of pointer to free block or NULL if no matching block was
-*   found.
-*
-* NOTES
-*   The block is just located. It is not removed from free blocks list.
+*   block - address of block or NULL if no matching block was found.
 *
 ******************************************************************************
 */
 
-static struct FreeHeader** FindFreeBlock(uint32_t size)
+static struct FreeHeader* FindFreeBlock(uint32_t size)
 {
-	uint32_t range, subrange, wordindex, bitindex, mask, bmword, ptrindex;
+	uint32_t range, subrange, wordindex, bitindex, mask, bmword, listindex;
 
 	range = clz(size);
 	subrange = (size >> (29 - range)) & 3;
@@ -204,11 +247,17 @@ static struct FreeHeader** FindFreeBlock(uint32_t size)
 
 		mask = ~0;
 	}
-	
+
 	if (bitindex < 32)
 	{
-		ptrindex = (wordindex << 5) + bitindex - 16; 
-		return &Allocator->Pointers[ptrindex];
+		struct Node *blknode;
+		struct FreeHeader *block;
+
+		listindex = (wordindex << 5) + bitindex - 16;
+		blknode = RemHead(&Allocator->Lists[listindex]);
+		block = (struct FreeHeader*)((uint8_t*)blknode - offsetof(struct FreeHeader, Free));
+		
+		return block;
 	}
 
 	return NULL;
@@ -498,6 +547,7 @@ void FreeMem(void *block)
 
 void StartAllocator(void *lowmem, uint32_t size)
 {
+	struct FreeHeader *block;
 	struct MemRoot *root;
 	int i;
 
@@ -512,11 +562,17 @@ void StartAllocator(void *lowmem, uint32_t size)
 	root->BitMap[2] = 0;
 	root->BitMap[3] = 0;
 
-	for (i = 0; i < 100; i++) root->Pointers[i] = NULL;
-	Allocator = root;
+	for (i = 0; i < 100; i++) InitList(&Lists[i]);
 
 	/* now insert the block to allocator root */
 
-	InsertFreeBlock(lowmem, size, NULL, LAST_IN_POOL);
+	block = (struct FreeHeader*)lowmem;
+	block->Size = size | LAST_IN_POOL;
+	block->PrevPhys = NULL;
+	InsertFreeBlock(block);	
+	Allocator = root;
+
+	// debug
+
 	ListBlocksPhysically(lowmem);
 }
